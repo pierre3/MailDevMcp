@@ -1,10 +1,10 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.4.11605.240 stable
+VisualStudioVersion = 18.4.11605.240
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MailDevMcp", "MailDevMcp.csproj", "{37118F22-FF1D-E0A2-9150-215D4988EFC3}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MailDevMcp.UnitTests", "MailDevMcp.UnitTests\MailDevMcp.UnitTests.csproj", "{3A55C411-B3E3-4E02-8F0C-CF80A3F1D044}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MailDevMcp", "MailDevMcp\MailDevMcp.csproj", "{FB131CBD-B323-9F98-7755-C8661F35C723}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -12,14 +12,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{37118F22-FF1D-E0A2-9150-215D4988EFC3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{37118F22-FF1D-E0A2-9150-215D4988EFC3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{37118F22-FF1D-E0A2-9150-215D4988EFC3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{37118F22-FF1D-E0A2-9150-215D4988EFC3}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3A55C411-B3E3-4E02-8F0C-CF80A3F1D044}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3A55C411-B3E3-4E02-8F0C-CF80A3F1D044}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A55C411-B3E3-4E02-8F0C-CF80A3F1D044}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3A55C411-B3E3-4E02-8F0C-CF80A3F1D044}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB131CBD-B323-9F98-7755-C8661F35C723}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB131CBD-B323-9F98-7755-C8661F35C723}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB131CBD-B323-9F98-7755-C8661F35C723}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB131CBD-B323-9F98-7755-C8661F35C723}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

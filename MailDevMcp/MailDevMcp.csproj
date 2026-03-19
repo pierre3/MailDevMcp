@@ -23,15 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="MailDevMcp.UnitTests\**" />
-    <EmbeddedResource Remove="MailDevMcp.UnitTests\**" />
-    <None Remove="MailDevMcp.UnitTests\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include=".github\workflows\ci.yml" />
-    <None Include=".github\workflows\release.yml" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
