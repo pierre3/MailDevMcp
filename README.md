@@ -5,6 +5,8 @@ English | [日本語](README.ja.md)
 [![CI](https://github.com/pierre3/MailDevMcp/actions/workflows/ci.yml/badge.svg)](https://github.com/pierre3/MailDevMcp/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/MailDevMcp.svg)](https://www.nuget.org/packages/MailDevMcp)
 
+mcp-name: io.github.pierre3/maildev-mcp
+
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server for [MailDev](https://github.com/maildev/maildev).  
 Manage MailDev Docker containers and inspect received emails directly from your AI-powered editor or MCP client.
 
