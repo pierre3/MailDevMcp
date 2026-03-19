@@ -678,11 +678,11 @@ public class MailDevToolsTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .Returns(() => Task.FromResult(new HttpResponseMessage
             {
                 StatusCode = statusCode,
                 Content = new StringContent(content)
-            });
+            }));
         return mockHandler;
     }
 
@@ -1111,11 +1111,11 @@ public class MailDevToolsTests
                 "SendAsync",
                 ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Get && req.RequestUri != null && req.RequestUri.PathAndQuery == "/email"),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .Returns(() => Task.FromResult(new HttpResponseMessage
             {
                 StatusCode = statusCode,
                 Content = new StringContent(responseContent, Encoding.UTF8, "application/json")
-            });
+            }));
 
         var httpClient = new HttpClient(mockHttpMessageHandler.Object)
         {
