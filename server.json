@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.pierre3/maildev-mcp",
+  "description": "MailDev MCP server. Manage Docker containers and inspect emails from your AI editor or MCP client.",
+  "repository": {
+    "url": "https://github.com/pierre3/MailDevMcp",
+    "source": "github"
+  },
+  "version": "1.0.1",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "MailDevMcp",
+      "version": "1.0.1",
+      "runtimeHint": "dnx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MAILDEV_API_PORT",
+          "description": "Port number for the MailDev REST API (default: 1080)",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
