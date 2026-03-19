@@ -13,6 +13,7 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
     private const string CertVolumeName = "mdmcp-maildev-certs";
     private const int DefaultSmtpPort = 1025;
     private const int DefaultApiPort = 1080;
+    private const int DefaultPollIntervalMs = 1000;
     private const string ConnectionErrorMessage = "Cannot connect to MailDev. Please make sure MailDev is running.";
 
     [McpServerTool, Description("Start the MailDev Docker container.")]
@@ -23,50 +24,61 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
         [Description("SMTP authentication password (required when smtpUser is specified)")] string? smtpPassword = null,
         [Description("Enable TLS for SMTP connections (default: false)")] bool enableSsl = false)
     {
-        var (exitCode, output, _) = await RunDockerAsync($"inspect -f \"{{{{.State.Running}}}}\" {ContainerName}");
+        var (exitCode, output, _) = await RunDockerAsync("inspect", "-f", "{{.State.Running}}", ContainerName);
         if (exitCode == 0 && output.Trim().Contains("true"))
         {
             return $"MailDev is already running.\n- SMTP: localhost:{smtpPort}\n- Web UI: http://localhost:{apiPort}";
         }
         if (exitCode == 0)
         {
-            await RunDockerAsync($"rm -f {ContainerName}");
+            await RunDockerAsync("rm", "-f", ContainerName);
         }
         if (enableSsl)
         {
-            await RunDockerAsync($"volume rm -f {CertVolumeName}");
-            await RunDockerAsync($"volume create {CertVolumeName}");
+            await RunDockerAsync("volume", "rm", "-f", CertVolumeName);
+            await RunDockerAsync("volume", "create", CertVolumeName);
             var certResult = await RunDockerAsync(
-                $"run --rm -v {CertVolumeName}:/certs alpine sh -c "
-                + $"\"apk add --no-cache openssl > /dev/null 2>&1 "
-                + $"&& openssl req -x509 -newkey rsa:2048 -keyout /certs/key.pem -out /certs/cert.pem "
-                + $"-days 365 -nodes -subj '/CN=localhost' 2>/dev/null "
-                + $"&& chmod 644 /certs/key.pem /certs/cert.pem\"");
+                "run",
+                "--rm",
+                "-v",
+                $"{CertVolumeName}:/certs",
+                "alpine",
+                "sh",
+                "-c",
+                "apk add --no-cache openssl > /dev/null 2>&1 && openssl req -x509 -newkey rsa:2048 -keyout /certs/key.pem -out /certs/cert.pem -days 365 -nodes -subj '/CN=localhost' 2>/dev/null && chmod 644 /certs/key.pem /certs/cert.pem");
             if (certResult.ExitCode != 0)
             {
                 return $"Failed to generate self-signed certificate.\n{certResult.Error}";
             }
         }
-        var hasAuth = !string.IsNullOrEmpty(smtpUser);
-        var args = new StringBuilder($"run -d --name {ContainerName} -p {smtpPort}:1025 -p {apiPort}:1080");
+        var hasAuth = !string.IsNullOrWhiteSpace(smtpUser);
+        var hasPassword = hasAuth && !string.IsNullOrWhiteSpace(smtpPassword);
+        List<string> args = ["run", "-d", "--name", ContainerName, "-p", $"{smtpPort}:1025", "-p", $"{apiPort}:1080"];
         if (enableSsl)
         {
-            args.Append($" -v {CertVolumeName}:/cert:ro");
+            args.Add("-v");
+            args.Add($"{CertVolumeName}:/cert:ro");
         }
-        args.Append(" maildev/maildev");
+        args.Add("maildev/maildev");
         if (hasAuth)
         {
-            args.Append($" --incoming-user {smtpUser}");
-            if (!string.IsNullOrEmpty(smtpPassword))
+            args.Add("--incoming-user");
+            args.Add(smtpUser!);
+            if (hasPassword)
             {
-                args.Append($" --incoming-pass {smtpPassword}");
+                args.Add("--incoming-pass");
+                args.Add(smtpPassword!);
             }
         }
         if (enableSsl)
         {
-            args.Append(" --incoming-secure --incoming-cert /cert/cert.pem --incoming-key /cert/key.pem");
+            args.Add("--incoming-secure");
+            args.Add("--incoming-cert");
+            args.Add("/cert/cert.pem");
+            args.Add("--incoming-key");
+            args.Add("/cert/key.pem");
         }
-        var result = await RunDockerAsync(args.ToString());
+        var result = await RunDockerAsync(args);
         if (result.ExitCode != 0)
         {
             return $"Failed to start MailDev.\n{result.Error}";
@@ -80,25 +92,20 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
         sb.AppendLine($"- Auth: {(hasAuth ? $"enabled (user: {smtpUser})" : "disabled")}");
         sb.AppendLine($"- TLS: {(enableSsl ? "enabled (self-signed certificate)" : "disabled")}");
         sb.AppendLine();
-        sb.AppendLine("Recommended Mail.json settings:");
-        sb.AppendLine($"  \"SmtpHost\": \"localhost\"");
-        sb.AppendLine($"  \"SmtpPort\": {smtpPort}");
-        sb.AppendLine($"  \"SmtpUserName\": {(hasAuth ? $"\"{smtpUser}\"" : "null")}");
-        sb.AppendLine($"  \"SmtpPassword\": {(!string.IsNullOrEmpty(smtpPassword) ? $"\"{smtpPassword}\"" : "null")}");
-        sb.AppendLine($"  \"SmtpEnableSsl\": {(enableSsl ? "true" : "false")}");
-        if (enableSsl)
-        {
-            sb.AppendLine($"  \"ServerCertificateValidationCallback\": true  // Required for self-signed certificate");
-            sb.AppendLine($"  \"SecureSocketOptions\": \"SslOnConnect\"");
-        }
+        sb.AppendLine("SMTP connection info:");
+        sb.AppendLine($"  Host: localhost");
+        sb.AppendLine($"  Port: {smtpPort}");
+        sb.AppendLine($"  Username: {(hasAuth ? smtpUser : "(none)")}");
+        sb.AppendLine($"  Password: {(hasPassword ? smtpPassword : "(none)")}");
+        sb.AppendLine($"  TLS: {(enableSsl ? "required" : "none")}");
         return sb.ToString();
     }
 
     [McpServerTool, Description("Stop and remove the MailDev Docker container.")]
     public static async Task<string> StopMaildev()
     {
-        var (exitCode, _, error) = await RunDockerAsync($"rm -f {ContainerName}");
-        await RunDockerAsync($"volume rm -f {CertVolumeName}");
+        var (exitCode, _, error) = await RunDockerAsync("rm", "-f", ContainerName);
+        await RunDockerAsync("volume", "rm", "-f", CertVolumeName);
         return exitCode == 0
             ? "MailDev stopped and removed."
             : $"Failed to stop MailDev.\n{error}";
@@ -108,17 +115,20 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
     public static async Task<string> MaildevStatus()
     {
         var (exitCode, output, _) = await RunDockerAsync(
-            $"inspect -f \"{{{{.State.Status}}}} (Ports: {{{{range $p, $conf := .NetworkSettings.Ports}}}}{{{{$p}}}}->{{{{(index $conf 0).HostPort}}}} {{{{end}}}})\" {ContainerName}");
+            "inspect",
+            "-f",
+            "{{.State.Status}} (Ports: {{range $p, $conf := .NetworkSettings.Ports}}{{$p}}->{{(index $conf 0).HostPort}} {{end}})",
+            ContainerName);
         if (exitCode != 0)
         {
             return "MailDev is not running (container not found).";
         }
         var sb = new StringBuilder();
         sb.AppendLine($"MailDev status: {output.Trim()}");
-        var envResult = await RunDockerAsync($"inspect -f \"{{{{range .Config.Env}}}}{{{{println .}}}}{{{{end}}}}\" {ContainerName}");
+        var envResult = await RunDockerAsync("inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", ContainerName);
         if (envResult.ExitCode == 0)
         {
-            var cmdResult = await RunDockerAsync($"inspect -f \"{{{{json .Config.Cmd}}}}\" {ContainerName}");
+            var cmdResult = await RunDockerAsync("inspect", "-f", "{{json .Config.Cmd}}", ContainerName);
             var cmd = cmdResult.ExitCode == 0 ? cmdResult.Output.Trim() : "";
             var hasAuth = cmd.Contains("--incoming-user");
             var hasSsl = cmd.Contains("--incoming-secure");
@@ -166,14 +176,14 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
             var e = doc.RootElement;
             var from = FormatAddresses(e, "from");
             var to = FormatAddresses(e, "to");
-            var subject = e.GetProperty("subject").GetString() ?? "(no subject)";
-            var text = e.TryGetProperty("text", out var t) ? t.GetString() : "";
+            var subject = GetSubjectOrDefault(e);
+            var text = GetOptionalString(e, "text") ?? string.Empty;
             var result = $"From: {from}\nTo: {to}\nSubject: {subject}\n\nBody:\n{text}";
             if (e.TryGetProperty("attachments", out var attachments))
             {
                 var attLines = attachments.EnumerateArray().Select((a, i) =>
                 {
-                    var fileName = a.GetProperty("fileName").GetString();
+                    var fileName = GetOptionalString(a, "fileName") ?? "(unnamed attachment)";
                     var contentType = a.TryGetProperty("contentType", out var ct)
                         ? ct.GetString()
                         : "unknown";
@@ -192,7 +202,7 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
         }
     }
 
-    [McpServerTool, Description("Verify that an email attachment matches the original data by comparing Base64-encoded content.")]
+    [McpServerTool, Description("Verify that an email attachment matches the original data. Accepts Base64-encoded original data and compares it byte-by-byte with the received attachment.")]
     public async Task<string> VerifyAttachment(
         [Description("Email ID")] string emailId,
         [Description("Attachment index (0-based)")] int attachmentIndex,
@@ -207,17 +217,17 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
             using var doc = JsonDocument.Parse(json);
             var e = doc.RootElement;
             if (!e.TryGetProperty("attachments", out var attachments)
+                || attachmentIndex < 0
                 || attachmentIndex >= attachments.GetArrayLength())
             {
                 return $"Attachment (index: {attachmentIndex}) not found.";
             }
             var attachment = attachments[attachmentIndex];
             var fileName = attachment.GetProperty("fileName").GetString();
-            var (contentBase64, fetchError) = await FetchAttachmentBase64Async(client, attachment, emailId);
+            var (receivedBytes, fetchError) = await FetchAttachmentBytesAsync(client, attachment, emailId);
             if (fetchError != null) return fetchError;
             var originalBytes = Convert.FromBase64String(originalBase64);
-            var receivedBytes = Convert.FromBase64String(contentBase64!);
-            if (originalBytes.Length != receivedBytes.Length)
+            if (originalBytes.Length != receivedBytes!.Length)
             {
                 return $"❌ File corrupted: size mismatch\n"
                      + $"  Original: {originalBytes.Length} bytes\n"
@@ -290,35 +300,63 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
         [Description("Filter by recipient address (case-insensitive partial match, optional)")] string? to = null)
     {
         var client = httpClientFactory.CreateClient("MailDev");
-        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-        const int pollIntervalMs = 1000;
+        var deadline = timeoutSeconds > 0
+            ? DateTime.UtcNow.AddSeconds(timeoutSeconds)
+            : DateTime.UtcNow;
+        var transientConnectionFailureCount = 0;
         while (DateTime.UtcNow < deadline)
         {
             try
             {
-                var response = await client.GetAsync("/email");
+                var response = await client.GetAsync("/email", HttpCompletionOption.ResponseHeadersRead);
                 if (response.IsSuccessStatusCode)
                 {
-                    var json = await response.Content.ReadAsStringAsync();
-                    using var doc = JsonDocument.Parse(json);
+                    await using var stream = await response.Content.ReadAsStreamAsync();
+                    using var doc = await JsonDocument.ParseAsync(stream);
                     var match = doc.RootElement.EnumerateArray().FirstOrDefault(e => MatchesFilter(e, subject, from, to));
                     if (match.ValueKind != JsonValueKind.Undefined)
                     {
-                        var id = match.GetProperty("id").GetString();
-                        var subj = match.GetProperty("subject").GetString() ?? "(no subject)";
+                        var id = GetOptionalString(match, "id") ?? string.Empty;
+                        var subj = GetSubjectOrDefault(match);
                         var fromAddr = FormatAddresses(match, "from");
-                        return $"Email arrived.\n- ID: {id}\n- Subject: {subj}\n- From: {fromAddr}";
+                        var result = $"Email arrived.\n- ID: {id}\n- Subject: {subj}\n- From: {fromAddr}";
+                        if (transientConnectionFailureCount > 0)
+                        {
+                            result += $"\n- Transient connection failures: {transientConnectionFailureCount}";
+                        }
+
+                        return result;
                     }
                 }
             }
-            catch (HttpRequestException) { }
-            await Task.Delay(pollIntervalMs);
+            catch (HttpRequestException)
+            {
+                transientConnectionFailureCount++;
+            }
+
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            var delay = remaining < TimeSpan.FromMilliseconds(DefaultPollIntervalMs)
+                ? remaining
+                : TimeSpan.FromMilliseconds(DefaultPollIntervalMs);
+            await Task.Delay(delay);
         }
-        return $"Timed out after {timeoutSeconds}s waiting for email"
+        var timeoutMessage = $"Timed out after {timeoutSeconds}s waiting for email"
             + (subject != null ? $" with subject '{subject}'" : "")
             + (from != null ? $" from '{from}'" : "")
             + (to != null ? $" to '{to}'" : "")
             + ".";
+
+        if (transientConnectionFailureCount > 0)
+        {
+            timeoutMessage += $" MailDev connection attempts failed {transientConnectionFailureCount} time(s) during polling.";
+        }
+
+        return timeoutMessage;
     }
 
     [McpServerTool, Description("Get the HTML body of an email by ID.")]
@@ -388,6 +426,7 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
             using var doc = JsonDocument.Parse(json);
             var e = doc.RootElement;
             if (!e.TryGetProperty("attachments", out var attachments)
+                || attachmentIndex < 0
                 || attachmentIndex >= attachments.GetArrayLength())
             {
                 return $"Attachment (index: {attachmentIndex}) not found.";
@@ -396,9 +435,9 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
             var fileName = attachment.GetProperty("fileName").GetString();
             var contentType = attachment.TryGetProperty("contentType", out var ct) ? ct.GetString() : "unknown";
             var size = attachment.TryGetProperty("length", out var len) ? len.GetInt64() : 0;
-            var (contentBase64, fetchError) = await FetchAttachmentBase64Async(client, attachment, emailId);
+            var (contentBytes, fetchError) = await FetchAttachmentBytesAsync(client, attachment, emailId);
             if (fetchError != null) return fetchError;
-            return $"File name: {fileName}\nContent-Type: {contentType}\nSize: {size} bytes\nBase64:\n{contentBase64}";
+            return $"File name: {fileName}\nContent-Type: {contentType}\nSize: {size} bytes\nBase64:\n{Convert.ToBase64String(contentBytes!)}";
         }
         catch (HttpRequestException)
         {
@@ -408,21 +447,29 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
 
     private static string FormatEmailSummary(JsonElement email, int index)
     {
-        var id = email.GetProperty("id").GetString();
+        var id = GetOptionalString(email, "id") ?? string.Empty;
         var from = FormatAddresses(email, "from");
         var to = FormatAddresses(email, "to");
-        var subject = email.GetProperty("subject").GetString() ?? "(no subject)";
+        var subject = GetSubjectOrDefault(email);
         var attachmentCount = email.TryGetProperty("attachments", out var att) ? att.GetArrayLength() : 0;
         return $"[{index}] ID: {id}\n    From: {from}\n    To: {to}\n    Subject: {subject}\n    Attachments: {attachmentCount}";
     }
 
-    private static async Task<(string? Base64, string? Error)> FetchAttachmentBase64Async(
+    private static string GetSubjectOrDefault(JsonElement email)
+        => GetOptionalString(email, "subject") is { Length: > 0 } subject ? subject : "(no subject)";
+
+    private static string? GetOptionalString(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static async Task<(byte[]? Bytes, string? Error)> FetchAttachmentBytesAsync(
         HttpClient client, JsonElement attachment, string emailId)
     {
         var fileName = attachment.GetProperty("fileName").GetString();
         if (attachment.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String)
         {
-            return (c.GetString()!, null);
+            return (Convert.FromBase64String(c.GetString()!), null);
         }
         var response = await client.GetAsync($"/email/{emailId}/attachment/{fileName}");
         if (!response.IsSuccessStatusCode)
@@ -430,7 +477,7 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
             return (null, $"Failed to retrieve attachment '{fileName}'.");
         }
         var bytes = await response.Content.ReadAsByteArrayAsync();
-        return (Convert.ToBase64String(bytes), null);
+        return (bytes, null);
     }
 
     private static bool MatchesFilter(JsonElement email, string? subject, string? from, string? to)
@@ -462,26 +509,37 @@ public class MailDevTools(IHttpClientFactory httpClientFactory)
         return string.Join(", ", addresses.EnumerateArray().Select(a =>
         {
             var name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
-            var address = a.GetProperty("address").GetString();
+            var address = GetOptionalString(a, "address");
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return string.IsNullOrWhiteSpace(name) ? "(unknown address)" : name!;
+            }
+
             return string.IsNullOrEmpty(name) ? address! : $"{name} <{address}>";
         }));
     }
 
     private static async Task<(int ExitCode, string Output, string Error)> RunDockerAsync(
-        string arguments)
+        params string[] arguments)
+        => await RunDockerAsync((IEnumerable<string>)arguments);
+
+    private static async Task<(int ExitCode, string Output, string Error)> RunDockerAsync(
+        IEnumerable<string> arguments)
     {
-        using var process = new Process
+        var startInfo = new ProcessStartInfo
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "docker",
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
+            FileName = "docker",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
         process.Start();
         var output = await process.StandardOutput.ReadToEndAsync();
         var error = await process.StandardError.ReadToEndAsync();
